@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Token struct{}
 
@@ -9,23 +12,28 @@ type Limit struct {
 	Interval  int64
 	Precision float64
 	Count     int64
-	Output    chan<- Token
+	Output    chan Token
 	ShutDown  chan struct{}
 }
 
+// Create new limit, interval is set in milliseconds.
 func NewLimit(name string, interval, count int64, precision float64) *Limit {
-	return &Limit{
+	limit := &Limit{
 		Name:      name,
 		Interval:  interval,
 		Count:     count,
 		Precision: precision,
-		Output:    make(chan<- Token),
+		Output:    make(chan Token),
 		ShutDown:  make(chan struct{}),
 	}
+	Info.Printf("Create limit %+v", *limit)
+
+	return limit
 }
 
 func (limit *Limit) Run() {
-	ticker := time.NewTicker(time.Duration(limit.Interval / limit.Count))
+	updateInterval := time.Duration(limit.Interval / limit.Count)
+	ticker := time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 
 	for {
 		select {
@@ -37,4 +45,9 @@ func (limit *Limit) Run() {
 			return
 		}
 	}
+}
+
+func (limit *Limit) String() string {
+	return fmt.Sprintf("<Name: %s, Interval: %d, Count: %d, Precision: %f>",
+		limit.Name, limit.Interval, limit.Count, limit.Precision)
 }
