@@ -16,9 +16,13 @@ var (
 	Host    string
 	timeout int64
 	port    int
+	// TODO(gstepanov): add concurrent hash map instead of native.
+	limitsMap map[string]Limit
 )
 
 func init() {
+	limitsMap = make(map[string]Limit)
+
 	Info = log.New(os.Stdout,
 		"INFO: ",
 		log.Ldate|log.Ltime|log.Lshortfile)

@@ -8,12 +8,12 @@ import (
 type Token struct{}
 
 type Limit struct {
-	Name      string
-	Interval  int64
-	Precision float64
-	Count     int64
-	Output    chan Token
-	ShutDown  chan struct{}
+	Name      string        `json:"name"`
+	Interval  int64         `json:"interval"`
+	Precision float64       `json:"precision"`
+	Count     int64         `json:"count"`
+	Output    chan Token    `json:"-"`
+	ShutDown  chan struct{} `json:"-"`
 }
 
 // Create new limit, interval is set in milliseconds.
