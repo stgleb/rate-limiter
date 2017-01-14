@@ -34,6 +34,8 @@ func NewLimit(name string, interval, count int64, precision float64) *Limit {
 		Precision: precision,
 		Output:    make(chan Token),
 		ShutDown:  make(chan struct{}),
+		Update:    make(chan LimitConf),
+		GetConf:   make(chan LimitConf),
 	}
 	Info.Printf("Create limit %+v", *limit)
 
@@ -59,10 +61,13 @@ func (limit *Limit) Run() {
 			Info.Printf("Channel %s shut down", limit.Name)
 			return
 		case currentConf = <-limit.Update:
-			// TODO(stgleb) consider check if values were changed.
+			// TODO(stgleb): consider check if values were changed
 			limit.Count = currentConf.Count
 			limit.Interval = currentConf.Interval
 			limit.Precision = currentConf.Precision
+			// TODO(stgleb): consider that can be racy
+			updateInterval := time.Duration(limit.Interval / limit.Count)
+			ticker = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 
 			if len(currentConf.Name) > 0 {
 				limit.Name = currentConf.Name
