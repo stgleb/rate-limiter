@@ -126,7 +126,7 @@ func DeleteLimit(w http.ResponseWriter, r *http.Request) {
 
 	// Get limit from map in thread safe way
 	lock.Lock()
-	_, ok := limitsMap[limitName]
+	limit, ok := limitsMap[limitName]
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -134,6 +134,7 @@ func DeleteLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	delete(limitsMap, limitName)
+	limit.ShutDown <- struct{}{}
 	lock.Unlock()
 }
 
