@@ -1,24 +1,26 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
 var (
 	Info    *log.Logger
 	Error   *log.Logger
-	limit   *Limit
 	Host    string
 	timeout int64
 	port    int
 	// TODO(gstepanov): add concurrent hash map instead of native.
 	limitsMap map[string]Limit
+	lock      sync.RWMutex
 )
 
 func init() {
@@ -34,6 +36,18 @@ func init() {
 }
 
 func AcquireToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	limitName := vars["limit"]
+
+	// Get limit from map in thread safe way
+	lock.RLock()
+	limit, ok := limitsMap[limitName]
+
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	lock.RUnlock()
 	t := time.After(time.Duration(timeout))
 
 	// Acquire token from limit.
@@ -46,7 +60,24 @@ func AcquireToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateLimit(w http.ResponseWriter, r *http.Request) {
+	var limit Limit
 
+	if err := json.NewDecoder(r.Body).Decode(limit); !err {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Get limit from map in thread safe way
+	lock.Lock()
+	_, ok := limitsMap[limit.Name]
+
+	if ok {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
+
+	limitsMap[limit.Name] = limit
+	lock.Unlock()
 }
 
 func UpdateLimit(w http.ResponseWriter, r *http.Request) {
@@ -58,10 +89,6 @@ func main() {
 	Host = *flag.String("address", "0.0.0.0", "Address to listen")
 	listenStr := fmt.Sprintf("%s:%d", Host, port)
 
-	// Create and start new limit
-	// Allows to get one token per 3 second.
-	limit = NewLimit("limit0", 1000*3, 1, 0.1)
-	go limit.Run()
 	flag.Parse()
 	router := mux.NewRouter()
 
