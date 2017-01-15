@@ -86,7 +86,7 @@ func (limit *Limit) Run() {
 			limit.Count = currentConf.Count
 			limit.Interval = currentConf.Interval
 			limit.Precision = currentConf.Precision
-			// TODO(stgleb): consider that can be racy
+			// TODO(stgleb): consider whether manipulation of ticker inside select is racy.
 			updateInterval := time.Duration(limit.Interval / limit.Count)
 			ticker = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 

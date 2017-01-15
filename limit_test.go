@@ -2,12 +2,14 @@ package main
 
 import (
 	"github.com/stretchr/testify/assert"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
 
 func TestLimitAcqireToken(t *testing.T) {
-	limit = NewLimit("limit0", 1, 1, 0.1)
+	limit := NewLimit("limit0", 1, 1, 0.1)
 	go limit.Run()
 	defer func() {
 		limit.ShutDown <- struct{}{}
@@ -22,7 +24,7 @@ func TestLimitAcqireToken(t *testing.T) {
 func TestLimitFrequency(t *testing.T) {
 	interval := 100
 	count := 5
-	limit = NewLimit("limit0", interval, count, 0.1)
+	limit := NewLimit("limit0", interval, count, 0.1)
 	tick := time.NewTicker(time.Duration(interval) * time.Millisecond)
 	go limit.Run()
 
@@ -63,4 +65,29 @@ func TestLimitGetConf(t *testing.T) {
 	assert.Equal(t, limit.Name, limitConf.Name)
 	assert.Equal(t, limit.Count, limitConf.Count)
 	assert.Equal(t, limit.Interval, limitConf.Interval)
+}
+
+func TestGetLimitHttp(t *testing.T) {
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(GetLimit)
+	req := httptest.NewRequest(http.MethodGet, "/limit/1", nil)
+	handler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+}
+
+func TestCreateLimitHttp(t *testing.T) {
+
+}
+
+func TestUpdateLimitHttp(t *testing.T) {
+
+}
+
+func TestDeleteLimitHttp(t *testing.T) {
+
 }

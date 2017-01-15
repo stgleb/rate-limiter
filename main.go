@@ -18,7 +18,7 @@ var (
 	Host    string
 	timeout int64
 	port    int
-	// TODO(gstepanov): add concurrent hash map instead of native.
+	// TODO(stgleb): extract all data to struct LimtiServer to make code better testable.
 	limitsMap map[string]Limit
 	lock      sync.RWMutex
 )
@@ -62,7 +62,7 @@ func AcquireToken(w http.ResponseWriter, r *http.Request) {
 func CreateLimit(w http.ResponseWriter, r *http.Request) {
 	var limit Limit
 
-	if err := json.NewDecoder(r.Body).Decode(limit); !err {
+	if err := json.NewDecoder(r.Body).Decode(limit); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -93,7 +93,7 @@ func GetLimit(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	limitConf <- limit.GetConf
+	limitConf = <-limit.GetConf
 	lock.RUnlock()
 	json.NewEncoder(w).Encode(limitConf)
 }
@@ -101,7 +101,7 @@ func GetLimit(w http.ResponseWriter, r *http.Request) {
 func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	var limitConf LimitConf
 
-	if err := json.NewDecoder(r.Body).Decode(limitConf); !err {
+	if err := json.NewDecoder(r.Body).Decode(limitConf); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
