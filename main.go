@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"os"
@@ -48,6 +49,10 @@ func CreateLimit(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func UpdateLimit(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func main() {
 	port = *flag.Int("port", 9000, "port number")
 	Host = *flag.String("address", "0.0.0.0", "Address to listen")
@@ -58,12 +63,14 @@ func main() {
 	limit = NewLimit("limit0", 1000*3, 1, 0.1)
 	go limit.Run()
 	flag.Parse()
+	router := mux.NewRouter()
 
-	http.HandleFunc("/token/acquire", AcquireToken)
-	http.HandleFunc("/limit", CreateLimit)
+	router.HandleFunc("/limit/{limit}/acquire", AcquireToken).Methods(http.MethodHead)
+	router.HandleFunc("/limit", CreateLimit).Methods(http.MethodPost)
+	router.HandleFunc("/limit", UpdateLimit).Methods(http.MethodPut)
 
 	Info.Printf("Listen on %s", listenStr)
-	if err := http.ListenAndServe(listenStr, nil); err != nil {
+	if err := http.ListenAndServe(listenStr, router); err != nil {
 		Error.Fatal("ListenAndServe:", err)
 	}
 }
