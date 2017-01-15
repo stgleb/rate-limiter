@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -9,24 +10,44 @@ type Token struct{}
 
 type LimitConf struct {
 	Name      string  `json:"name"`
-	Interval  int64   `json:"interval"`
-	Count     int64   `json:"count"`
+	Interval  int     `json:"interval"`
+	Count     int     `json:"count"`
 	Precision float64 `json:"precision"`
 }
 
 type Limit struct {
 	Name      string         `json:"name"`
-	Interval  int64          `json:"interval"`
+	Interval  int            `json:"interval"`
 	Precision float64        `json:"precision"`
-	Count     int64          `json:"count"`
+	Count     int            `json:"count"`
 	Output    chan Token     `json:"-"`
 	ShutDown  chan struct{}  `json:"-"`
 	Update    chan LimitConf `json:"-"`
 	GetConf   chan LimitConf `json:"-"`
 }
 
+func NewLimitConfig(name string, interval, count int, precision float64) (LimitConf, error) {
+	if count < 0 {
+		return LimitConf{}, errors.New("Count cannot be negative")
+	}
+
+	if interval < 0 {
+		return LimitConf{}, errors.New("Interval cannot be negative")
+	}
+
+	conf := LimitConf{
+		Name:      name,
+		Interval:  interval,
+		Count:     count,
+		Precision: precision,
+	}
+	Info.Printf("Create limit config %+v", conf)
+
+	return conf, nil
+}
+
 // Create new limit, interval is set in milliseconds.
-func NewLimit(name string, interval, count int64, precision float64) *Limit {
+func NewLimit(name string, interval, count int, precision float64) *Limit {
 	limit := &Limit{
 		Name:      name,
 		Interval:  interval,
@@ -72,7 +93,7 @@ func (limit *Limit) Run() {
 			if len(currentConf.Name) > 0 {
 				limit.Name = currentConf.Name
 			}
-		case limit <- currentConf:
+		case limit.GetConf <- currentConf:
 			// Try to always send current configuration to external
 			// consumer.
 		}

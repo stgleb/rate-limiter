@@ -13,12 +13,9 @@ func TestLimitAcqireToken(t *testing.T) {
 		limit.ShutDown <- struct{}{}
 	}()
 
-	token := <-limit.Output
-
-	switch token.(type) {
-	case Token:
-	default:
-		t.Errorf("Unknown type %t of token", token)
+	select {
+	case <-limit.Output:
+	case <-time.After(time.Millisecond * 2):
 	}
 }
 
@@ -40,13 +37,30 @@ func TestLimitFrequency(t *testing.T) {
 	}
 
 exit:
-	assert.Equal(t, count, 0)
+	if count < 0 {
+		t.Errorf("Limit exceed by %d", -count)
+	}
 }
 
 func TestLimitUpdate(t *testing.T) {
+	limit := NewLimit("test", 1, 1, 0.1)
+	limitConfig, err := NewLimitConfig("", 2, 2, 0.1)
 
+	if err != nil {
+		t.Errorf("Error creating limit config %s", err.Error())
+	}
+
+	go limit.Run()
+	limit.Update <- limitConfig
+	assert.Equal(t, limit.Count, limitConfig.Count)
+	assert.Equal(t, limit.Interval, limitConfig.Interval)
 }
 
 func TestLimitGetConf(t *testing.T) {
-
+	limit := NewLimit("test", 10, 4, 0.1)
+	go limit.Run()
+	limitConf := <-limit.GetConf
+	assert.Equal(t, limit.Name, limitConf.Name)
+	assert.Equal(t, limit.Count, limitConf.Count)
+	assert.Equal(t, limit.Interval, limitConf.Interval)
 }
