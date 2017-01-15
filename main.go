@@ -80,6 +80,24 @@ func CreateLimit(w http.ResponseWriter, r *http.Request) {
 	lock.Unlock()
 }
 
+func GetLimit(w http.ResponseWriter, r *http.Request) {
+	var limitConf LimitConf
+	vars := mux.Vars(r)
+	limitName := vars["limit"]
+
+	// Get limit from map in thread safe way
+	lock.RLock()
+	limit, ok := limitsMap[limitName]
+
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	limitConf <- limit.GetConf
+	lock.RUnlock()
+	json.NewEncoder(w).Encode(limitConf)
+}
+
 func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	var limitConf LimitConf
 
@@ -102,6 +120,10 @@ func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+func DeleteLimit(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func main() {
 	port = *flag.Int("port", 9000, "port number")
 	Host = *flag.String("address", "0.0.0.0", "Address to listen")
@@ -111,6 +133,7 @@ func main() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/limit/{limit}/acquire", AcquireToken).Methods(http.MethodHead)
+	router.HandleFunc("/limit/{limit}", GetLimit).Methods(http.MethodGet)
 	router.HandleFunc("/limit", CreateLimit).Methods(http.MethodPost)
 	router.HandleFunc("/limit", UpdateLimit).Methods(http.MethodPut)
 
