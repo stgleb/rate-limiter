@@ -121,7 +121,20 @@ func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteLimit(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	limitName := vars["limit"]
 
+	// Get limit from map in thread safe way
+	lock.Lock()
+	_, ok := limitsMap[limitName]
+
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	delete(limitsMap, limitName)
+	lock.Unlock()
 }
 
 func main() {
@@ -136,6 +149,7 @@ func main() {
 	router.HandleFunc("/limit/{limit}", GetLimit).Methods(http.MethodGet)
 	router.HandleFunc("/limit", CreateLimit).Methods(http.MethodPost)
 	router.HandleFunc("/limit", UpdateLimit).Methods(http.MethodPut)
+	router.HandleFunc("/limit/{limit}", DeleteLimit).Methods(http.MethodDelete)
 
 	Info.Printf("Listen on %s", listenStr)
 	if err := http.ListenAndServe(listenStr, router); err != nil {
