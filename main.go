@@ -81,7 +81,25 @@ func CreateLimit(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateLimit(w http.ResponseWriter, r *http.Request) {
+	var limitConf LimitConf
 
+	if err := json.NewDecoder(r.Body).Decode(limitConf); !err {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Get limit from map in thread safe way
+	lock.RLock()
+	limit, ok := limitsMap[limitConf.Name]
+
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} else {
+		limit.Update <- limitConf
+	}
+	lock.RUnlock()
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func main() {
