@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
+"github.com/gorilla/mux"
 )
 
 func init() {
@@ -119,8 +118,8 @@ func TestCreateLimitHttp201(t *testing.T) {
 	limitServer := LimitServer{
 		limitsMap: make(map[string]Limit),
 	}
-	router := mux.NewRouter()
-	router.HandleFunc("/limit", limitServer.CreateLimit)
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(limitServer.CreateLimit)
 	limit := NewLimit("foo", 1, 1, 0.1)
 	body := new(bytes.Buffer)
 	err := json.NewEncoder(body).Encode(limit)
@@ -129,23 +128,13 @@ func TestCreateLimitHttp201(t *testing.T) {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	port := GetPort()
+	req := httptest.NewRequest(http.MethodPost, "/limit", body)
+	handler.ServeHTTP(rr, req)
 
-	// Run http server
-	go func() {
-		http.ListenAndServe(fmt.Sprintf(":%d", port), router)
-	}()
-
-	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
-	req, _ := http.NewRequest(http.MethodPost, url, body)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Errorf("Error during request %s", err.Error())
-	}
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Wrong response code actual %d expected %d",
-			resp.StatusCode, http.StatusCreated)
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusCreated)
 	}
 }
 
@@ -158,8 +147,8 @@ func TestCreateLimitHttp409(t *testing.T) {
 	limitServer := LimitServer{
 		limitsMap: limitsMap,
 	}
-	router := mux.NewRouter()
-	router.HandleFunc("/limit", limitServer.CreateLimit)
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(limitServer.CreateLimit)
 	body := new(bytes.Buffer)
 	err := json.NewEncoder(body).Encode(limit)
 
@@ -167,23 +156,13 @@ func TestCreateLimitHttp409(t *testing.T) {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	port := GetPort()
+	req := httptest.NewRequest(http.MethodPost, "/limit", body)
+	handler.ServeHTTP(rr, req)
 
-	// Run http server
-	go func() {
-		http.ListenAndServe(fmt.Sprintf(":%d", port), router)
-	}()
-
-	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
-	req, _ := http.NewRequest(http.MethodPost, url, body)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Errorf("Error during request %s", err.Error())
-	}
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Errorf("Wrong response code actual %d expected %d",
-			resp.StatusCode, http.StatusConflict)
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusConflict {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusConflict)
 	}
 }
 
@@ -203,47 +182,29 @@ func TestUpdateLimitHttp202(t *testing.T) {
 		Interval:  2,
 		Precision: 0.1,
 	}
-	port := GetPort()
 	limitsMap := map[string]Limit{
 		"foo": *limit,
 	}
 	limitServer := LimitServer{
 		limitsMap: limitsMap,
 	}
-	router := mux.NewRouter()
-	router.HandleFunc("/limit", limitServer.UpdateLimit)
-	body := new(bytes.Buffer)
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(limitServer.UpdateLimit)
 
+	body := new(bytes.Buffer)
 	err := json.NewEncoder(body).Encode(limitConf)
 
 	if err != nil {
 		t.Errorf("Error while encoding limitconf to json %s", err.Error())
 	}
 
-	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	var wg sync.WaitGroup
-	wg.Add(1)
+	req := httptest.NewRequest(http.MethodPut, "/limit", body)
+	handler.ServeHTTP(rr, req)
 
-	// Run http server
-	go func() {
-		wg.Done()
-		http.Serve(listener, router)
-	}()
-
-	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
-	req, _ := http.NewRequest(http.MethodPut, url, body)
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		t.Errorf("Error during request %s", err.Error())
+	if status := rr.Code; status != http.StatusAccepted {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusAccepted)
 	}
-
-	if resp.StatusCode != http.StatusAccepted {
-		t.Errorf("Wrong response code actual %d expected %d",
-			resp.StatusCode, http.StatusAccepted)
-	}
-	wg.Wait()
 }
 
 func TestDeleteLimitHttp200(t *testing.T) {
@@ -252,40 +213,23 @@ func TestDeleteLimitHttp200(t *testing.T) {
 	// Run limit to be able to receive shutdown signal
 	go limit.Run()
 	// Run limit to be able to receive config updates
-	port := GetPort()
 	limitName := "foo"
-	limitsMap := map[string]Limit{
-		limitName: *limit,
-	}
 
 	limitServer := LimitServer{
-		limitsMap: limitsMap,
+		limitsMap: map[string]Limit{
+			limitName: *limit,
+		},
 	}
+	rr := httptest.NewRecorder()
 	router := mux.NewRouter()
 	router.HandleFunc("/limit/{limit}", limitServer.DeleteLimit).Methods(http.MethodDelete)
-	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	var wg sync.WaitGroup
-	wg.Add(1)
 
-	// Run http server
-	go func() {
-		wg.Done()
-		http.Serve(listener, router)
-	}()
+	url := fmt.Sprintf("/limit/%s", limitName)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	router.ServeHTTP(rr, req)
 
-	url := fmt.Sprintf("http://0.0.0.0:%d/limit/%s", port, limitName)
-	req, _ := http.NewRequest(http.MethodDelete, url, nil)
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		t.Errorf("Error during request %s", err.Error())
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Wrong response code actual %d expected %d",
-			resp.StatusCode, http.StatusOK)
-	}
-	// Wait to be sure that http server start working
-	wg.Wait()
 }
