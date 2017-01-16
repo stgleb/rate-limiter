@@ -102,7 +102,7 @@ func (limitServer *LimitServer) GetLimit(w http.ResponseWriter, r *http.Request)
 func (limitServer *LimitServer) UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	var limitConf LimitConf
 
-	if err := json.NewDecoder(r.Body).Decode(limitConf); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&limitConf); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

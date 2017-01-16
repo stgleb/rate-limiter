@@ -7,14 +7,31 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
 
 func init() {
 	rand.Seed(time.Now().Unix())
+}
+
+// Ask the kernel for a free open port that is ready to use
+func GetPort() int {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
 }
 
 func TestLimitAcqireToken(t *testing.T) {
@@ -170,8 +187,63 @@ func TestCreateLimitHttp409(t *testing.T) {
 	}
 }
 
-func TestUpdateLimitHttp(t *testing.T) {
+func TestUpdateLimitHttp202(t *testing.T) {
+	Info.Printf("TestUpdateLimitHttp202")
+	limit := NewLimit("foo", 1, 1, 0.1)
+	// Run limit to be able to receive config updates
+	go limit.Run()
+	// Shut down limit in the end
+	defer func() {
+		limit.ShutDown <- struct{}{}
+	}()
 
+	limitConf := LimitConf{
+		Name:      "foo",
+		Count:     2,
+		Interval:  2,
+		Precision: 0.1,
+	}
+	port := GetPort()
+	limitsMap := map[string]Limit{
+		"foo": *limit,
+	}
+	limitServer := LimitServer{
+		limitsMap: limitsMap,
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/limit", limitServer.UpdateLimit)
+	body := new(bytes.Buffer)
+
+	err := json.NewEncoder(body).Encode(limitConf)
+
+	if err != nil {
+		t.Errorf("Error while encoding limitconf to json %s", err.Error())
+	}
+
+	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Run http server
+	go func() {
+		wg.Done()
+		http.Serve(listener, router)
+	}()
+
+	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
+	req, _ := http.NewRequest(http.MethodPut, url, body)
+
+	resp, err := http.DefaultClient.Do(req)
+
+	if err != nil {
+		t.Errorf("Error during request %s", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("Wrong response code actual %d expected %d",
+			resp.StatusCode, http.StatusAccepted)
+	}
+	wg.Wait()
 }
 
 func TestDeleteLimitHttp(t *testing.T) {

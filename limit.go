@@ -82,6 +82,7 @@ func (limit *Limit) Run() {
 			Info.Printf("Channel %s shut down", limit.Name)
 			return
 		case currentConf = <-limit.Update:
+			Info.Printf("Update limit to %v", currentConf)
 			// TODO(stgleb): consider check if values were changed
 			limit.Count = currentConf.Count
 			limit.Interval = currentConf.Interval
