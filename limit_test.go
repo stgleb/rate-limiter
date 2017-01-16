@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"net/http"
@@ -12,7 +13,12 @@ import (
 	"time"
 )
 
+func init() {
+	rand.Seed(34525)
+}
+
 func TestLimitAcqireToken(t *testing.T) {
+	Info.Printf("TestLimitAcqireToken")
 	limit := NewLimit("limit0", 1, 1, 0.1)
 	go limit.Run()
 	defer func() {
@@ -26,6 +32,7 @@ func TestLimitAcqireToken(t *testing.T) {
 }
 
 func TestLimitFrequency(t *testing.T) {
+	Info.Printf("TestLimitFrequency")
 	interval := 100
 	count := 5
 	limit := NewLimit("limit0", interval, count, 0.1)
@@ -49,6 +56,7 @@ exit:
 }
 
 func TestLimitUpdate(t *testing.T) {
+	Info.Printf("TestLimitUpdate")
 	limit := NewLimit("test", 1, 1, 0.1)
 	limitConfig, err := NewLimitConfig("", 2, 2, 0.1)
 
@@ -63,6 +71,7 @@ func TestLimitUpdate(t *testing.T) {
 }
 
 func TestLimitGetConf(t *testing.T) {
+	Info.Printf("TestLimitGetConf")
 	limit := NewLimit("test", 10, 4, 0.1)
 	go limit.Run()
 	limitConf := <-limit.GetConf
@@ -72,8 +81,12 @@ func TestLimitGetConf(t *testing.T) {
 }
 
 func TestGetLimitHttp(t *testing.T) {
+	Info.Printf("TestGetLimitHttp")
+	limitServer := LimitServer{
+		limitsMap: make(map[string]Limit),
+	}
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(GetLimit)
+	handler := http.HandlerFunc(limitServer.GetLimit)
 	req := httptest.NewRequest(http.MethodGet, "/limit/1", nil)
 	handler.ServeHTTP(rr, req)
 
@@ -84,8 +97,13 @@ func TestGetLimitHttp(t *testing.T) {
 	}
 }
 
-func TestCreateLimitHttp(t *testing.T) {
-	http.HandleFunc("/limit", CreateLimit)
+func TestCreateLimitHttp201(t *testing.T) {
+	Info.Printf("TestCreateLimitHttp201")
+	limitServer := LimitServer{
+		limitsMap: make(map[string]Limit),
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/limit", limitServer.CreateLimit)
 	limit := NewLimit("foo", 1, 1, 0.1)
 	body := new(bytes.Buffer)
 	err := json.NewEncoder(body).Encode(limit)
@@ -94,11 +112,11 @@ func TestCreateLimitHttp(t *testing.T) {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	port := 1024 + (rand.Int() & (1 << 16))
+	port := 1024 + (rand.Int() & (1 << 15))
 
 	// Run http server
 	go func() {
-		http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+		http.ListenAndServe(fmt.Sprintf(":%d", port), router)
 	}()
 
 	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
@@ -112,18 +130,36 @@ func TestCreateLimitHttp(t *testing.T) {
 		t.Errorf("Wrong response code actual %d expected %d",
 			resp.StatusCode, http.StatusCreated)
 	}
+}
 
-	// Add new limit with the same name
+func TestCreateLimitHttp409(t *testing.T) {
+	Info.Printf("TestCreateLimitHttp409")
+	limit := NewLimit("foo", 1, 1, 0.1)
+	limitsMap := map[string]Limit{
+		"foo": *limit,
+	}
+	limitServer := LimitServer{
+		limitsMap: limitsMap,
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/limit", limitServer.CreateLimit)
+	body := new(bytes.Buffer)
+	err := json.NewEncoder(body).Encode(limit)
+
 	if err != nil {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	body2 := new(bytes.Buffer)
-	limit2 := NewLimit("foo", 1, 1, 0.1)
-	err = json.NewEncoder(body2).Encode(limit2)
-	req2, _ := http.NewRequest(http.MethodPost, url, body2)
-	resp, err = http.DefaultClient.Do(req2)
+	port := 1024 + (rand.Int() & (1 << 15))
 
+	// Run http server
+	go func() {
+		http.ListenAndServe(fmt.Sprintf(":%d", port), router)
+	}()
+
+	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
+	req, _ := http.NewRequest(http.MethodPost, url, body)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Errorf("Error during request %s", err.Error())
 	}

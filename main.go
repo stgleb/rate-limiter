@@ -18,14 +18,14 @@ var (
 	Host    string
 	timeout int64
 	port    int
-	// TODO(stgleb): extract all data to struct LimtiServer to make code better testable.
-	limitsMap map[string]Limit
-	lock      sync.RWMutex
 )
 
-func init() {
-	limitsMap = make(map[string]Limit)
+type LimitServer struct {
+	limitsMap map[string]Limit
+	sync.RWMutex
+}
 
+func init() {
 	Info = log.New(os.Stdout,
 		"INFO: ",
 		log.Ldate|log.Ltime|log.Lshortfile)
@@ -35,19 +35,19 @@ func init() {
 		log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-func AcquireToken(w http.ResponseWriter, r *http.Request) {
+func (limitServer *LimitServer) AcquireToken(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	limitName := vars["limit"]
 
 	// Get limit from map in thread safe way
-	lock.RLock()
-	limit, ok := limitsMap[limitName]
+	limitServer.RLock()
+	limit, ok := limitServer.limitsMap[limitName]
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	lock.RUnlock()
+	limitServer.RUnlock()
 	t := time.After(time.Duration(timeout))
 
 	// Acquire token from limit.
@@ -59,7 +59,7 @@ func AcquireToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func CreateLimit(w http.ResponseWriter, r *http.Request) {
+func (limitServer *LimitServer) CreateLimit(w http.ResponseWriter, r *http.Request) {
 	var limit Limit
 
 	if err := json.NewDecoder(r.Body).Decode(&limit); err != nil {
@@ -68,38 +68,38 @@ func CreateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get limit from map in thread safe way
-	lock.Lock()
-	_, ok := limitsMap[limit.Name]
+	limitServer.Lock()
+	_, ok := limitServer.limitsMap[limit.Name]
 
 	if ok {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 
-	limitsMap[limit.Name] = limit
+	limitServer.limitsMap[limit.Name] = limit
 	w.WriteHeader(http.StatusCreated)
-	lock.Unlock()
+	limitServer.Unlock()
 }
 
-func GetLimit(w http.ResponseWriter, r *http.Request) {
+func (limitServer *LimitServer) GetLimit(w http.ResponseWriter, r *http.Request) {
 	var limitConf LimitConf
 	vars := mux.Vars(r)
 	limitName := vars["limit"]
 
 	// Get limit from map in thread safe way
-	lock.RLock()
-	limit, ok := limitsMap[limitName]
+	limitServer.RLock()
+	limit, ok := limitServer.limitsMap[limitName]
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	limitConf = <-limit.GetConf
-	lock.RUnlock()
+	limitServer.RUnlock()
 	json.NewEncoder(w).Encode(limitConf)
 }
 
-func UpdateLimit(w http.ResponseWriter, r *http.Request) {
+func (limitServer *LimitServer) UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	var limitConf LimitConf
 
 	if err := json.NewDecoder(r.Body).Decode(limitConf); err != nil {
@@ -108,8 +108,8 @@ func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get limit from map in thread safe way
-	lock.RLock()
-	limit, ok := limitsMap[limitConf.Name]
+	limitServer.RLock()
+	limit, ok := limitServer.limitsMap[limitConf.Name]
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -117,41 +117,44 @@ func UpdateLimit(w http.ResponseWriter, r *http.Request) {
 	} else {
 		limit.Update <- limitConf
 	}
-	lock.RUnlock()
+	limitServer.RUnlock()
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func DeleteLimit(w http.ResponseWriter, r *http.Request) {
+func (limitServer *LimitServer) DeleteLimit(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	limitName := vars["limit"]
 
 	// Get limit from map in thread safe way
-	lock.Lock()
-	limit, ok := limitsMap[limitName]
+	limitServer.Lock()
+	limit, ok := limitServer.limitsMap[limitName]
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	delete(limitsMap, limitName)
+	delete(limitServer.limitsMap, limitName)
 	limit.ShutDown <- struct{}{}
-	lock.Unlock()
+	limitServer.Unlock()
 }
 
 func main() {
 	port = *flag.Int("port", 9000, "port number")
 	Host = *flag.String("address", "0.0.0.0", "Address to listen")
 	listenStr := fmt.Sprintf("%s:%d", Host, port)
+	limitServer := LimitServer{
+		limitsMap: make(map[string]Limit),
+	}
 
 	flag.Parse()
 	router := mux.NewRouter()
 
-	router.HandleFunc("/limit/{limit}/acquire", AcquireToken).Methods(http.MethodHead)
-	router.HandleFunc("/limit/{limit}", GetLimit).Methods(http.MethodGet)
-	router.HandleFunc("/limit", CreateLimit).Methods(http.MethodPost)
-	router.HandleFunc("/limit", UpdateLimit).Methods(http.MethodPut)
-	router.HandleFunc("/limit/{limit}", DeleteLimit).Methods(http.MethodDelete)
+	router.HandleFunc("/limit/{limit}/acquire", limitServer.AcquireToken).Methods(http.MethodHead)
+	router.HandleFunc("/limit/{limit}", limitServer.GetLimit).Methods(http.MethodGet)
+	router.HandleFunc("/limit", limitServer.CreateLimit).Methods(http.MethodPost)
+	router.HandleFunc("/limit", limitServer.UpdateLimit).Methods(http.MethodPut)
+	router.HandleFunc("/limit/{limit}", limitServer.DeleteLimit).Methods(http.MethodDelete)
 
 	Info.Printf("Listen on %s", listenStr)
 	if err := http.ListenAndServe(listenStr, router); err != nil {
