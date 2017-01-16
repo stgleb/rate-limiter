@@ -246,6 +246,46 @@ func TestUpdateLimitHttp202(t *testing.T) {
 	wg.Wait()
 }
 
-func TestDeleteLimitHttp(t *testing.T) {
+func TestDeleteLimitHttp200(t *testing.T) {
+	Info.Printf("TestDeleteLimitHttp200")
+	limit := NewLimit("foo", 1, 1, 0.1)
+	// Run limit to be able to receive shutdown signal
+	go limit.Run()
+	// Run limit to be able to receive config updates
+	port := GetPort()
+	limitName := "foo"
+	limitsMap := map[string]Limit{
+		limitName: *limit,
+	}
 
+	limitServer := LimitServer{
+		limitsMap: limitsMap,
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/limit/{limit}", limitServer.DeleteLimit).Methods(http.MethodDelete)
+	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Run http server
+	go func() {
+		wg.Done()
+		http.Serve(listener, router)
+	}()
+
+	url := fmt.Sprintf("http://0.0.0.0:%d/limit/%s", port, limitName)
+	req, _ := http.NewRequest(http.MethodDelete, url, nil)
+
+	resp, err := http.DefaultClient.Do(req)
+
+	if err != nil {
+		t.Errorf("Error during request %s", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Wrong response code actual %d expected %d",
+			resp.StatusCode, http.StatusOK)
+	}
+	// Wait to be sure that http server start working
+	wg.Wait()
 }
