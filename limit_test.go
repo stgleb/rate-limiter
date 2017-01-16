@@ -6,32 +6,11 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
-	"math/rand"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
-
-func init() {
-	rand.Seed(time.Now().Unix())
-}
-
-// Ask the kernel for a free open port that is ready to use
-func GetPort() int {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		panic(err)
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
-}
 
 func TestLimitAcqireToken(t *testing.T) {
 	Info.Printf("TestLimitAcqireToken")
