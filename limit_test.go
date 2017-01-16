@@ -129,7 +129,7 @@ func TestCreateLimitHttp201(t *testing.T) {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	port := 1024 + (rand.Int() & (1 << 15))
+	port := GetPort()
 
 	// Run http server
 	go func() {
@@ -167,7 +167,7 @@ func TestCreateLimitHttp409(t *testing.T) {
 		t.Errorf("Error while encoding limit to json %s", err.Error())
 	}
 
-	port := 1024 + (rand.Int() & (1 << 15))
+	port := GetPort()
 
 	// Run http server
 	go func() {
