@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"net"
@@ -11,7 +12,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-"github.com/gorilla/mux"
 )
 
 func init() {
