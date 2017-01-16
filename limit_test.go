@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	rand.Seed(34525)
+	rand.Seed(time.Now().Unix())
 }
 
 func TestLimitAcqireToken(t *testing.T) {
