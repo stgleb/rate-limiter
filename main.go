@@ -62,7 +62,7 @@ func AcquireToken(w http.ResponseWriter, r *http.Request) {
 func CreateLimit(w http.ResponseWriter, r *http.Request) {
 	var limit Limit
 
-	if err := json.NewDecoder(r.Body).Decode(limit); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&limit); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -77,6 +77,7 @@ func CreateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limitsMap[limit.Name] = limit
+	w.WriteHeader(http.StatusCreated)
 	lock.Unlock()
 }
 

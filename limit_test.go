@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"github.com/stretchr/testify/assert"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -81,7 +85,33 @@ func TestGetLimitHttp(t *testing.T) {
 }
 
 func TestCreateLimitHttp(t *testing.T) {
+	http.HandleFunc("/limit", CreateLimit)
+	limit := NewLimit("foo", 1, 1, 0.1)
+	body := new(bytes.Buffer)
+	err := json.NewEncoder(body).Encode(limit)
 
+	if err != nil {
+		t.Errorf("Error while encoding limit to json %s", err.Error())
+	}
+
+	port := 1024 + (rand.Int() & (1 << 16))
+
+	// Run http server
+	go func() {
+		http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	}()
+
+	url := fmt.Sprintf("http://0.0.0.0:%d/limit", port)
+	req, _ := http.NewRequest(http.MethodPost, url, body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Errorf("Error during request %s", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("Wrong response code actual %d expected %d",
+			resp.StatusCode, http.StatusCreated)
+	}
 }
 
 func TestUpdateLimitHttp(t *testing.T) {
