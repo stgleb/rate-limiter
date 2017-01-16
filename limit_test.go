@@ -112,6 +112,26 @@ func TestCreateLimitHttp(t *testing.T) {
 		t.Errorf("Wrong response code actual %d expected %d",
 			resp.StatusCode, http.StatusCreated)
 	}
+
+	// Add new limit with the same name
+	if err != nil {
+		t.Errorf("Error while encoding limit to json %s", err.Error())
+	}
+
+	body2 := new(bytes.Buffer)
+	limit2 := NewLimit("foo", 1, 1, 0.1)
+	err = json.NewEncoder(body2).Encode(limit2)
+	req2, _ := http.NewRequest(http.MethodPost, url, body2)
+	resp, err = http.DefaultClient.Do(req2)
+
+	if err != nil {
+		t.Errorf("Error during request %s", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("Wrong response code actual %d expected %d",
+			resp.StatusCode, http.StatusConflict)
+	}
 }
 
 func TestUpdateLimitHttp(t *testing.T) {
