@@ -7,17 +7,20 @@ import (
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"sync"
 	"time"
 )
 
 var (
-	Info    *log.Logger
-	Error   *log.Logger
-	Host    string
-	timeout int64
-	port    int
+	Info         *log.Logger
+	Error        *log.Logger
+	Host         string
+	timeout      int64
+	port         int
+	pprofEnabled bool
+	pprofport    int
 )
 
 type LimitServer struct {
@@ -140,14 +143,24 @@ func (limitServer *LimitServer) DeleteLimit(w http.ResponseWriter, r *http.Reque
 }
 
 func main() {
-	port = *flag.Int("port", 9000, "port number")
-	Host = *flag.String("address", "0.0.0.0", "Address to listen")
+	flag.IntVar(&port, "port", 9000, "port number")
+	flag.StringVar(&Host, "address", "0.0.0.0", "Address to listen")
+	flag.BoolVar(&pprofEnabled, "pprof", false, "enable pprof for profiling")
+	flag.IntVar(&pprofport, "pprofPort", 6060, "pprof port")
+	flag.Parse()
+
+	if pprofEnabled {
+		pprofUrl := fmt.Sprintf("localhost:%d", pprofport)
+		Info.Printf("Start profiling on %s", pprofUrl)
+		go func() {
+			log.Println(http.ListenAndServe(pprofUrl, nil))
+		}()
+	}
+
 	listenStr := fmt.Sprintf("%s:%d", Host, port)
 	limitServer := LimitServer{
 		limitsMap: make(map[string]Limit),
 	}
-
-	flag.Parse()
 	router := mux.NewRouter()
 
 	router.HandleFunc("/limit/{limit}/acquire", limitServer.AcquireToken).Methods(http.MethodHead)
