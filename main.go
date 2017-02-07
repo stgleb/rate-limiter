@@ -31,10 +31,10 @@ type LimitServer struct {
 	sync.RWMutex
 }
 
-func LoadLimits() {
+func LoadLimits() []*Limit {
 	var Id int
-	limits := make([]Limit, 0, 32)
-	Info.Print(db)
+	limits := make([]*Limit, 0, 32)
+	Info.Printf("Load limits from database %v", db)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -50,7 +50,7 @@ func LoadLimits() {
 	}
 
 	for rows.Next() {
-		limit := Limit{}
+		limit := NewEmptyLimit()
 		err := rows.Scan(&Id, &limit.OfferId, &limit.LimitId,
 			&limit.Count, &limit.Interval, &limit.Precision,
 			&limit.IsDeleted, &limit.UpdatedAt)
@@ -71,6 +71,8 @@ func LoadLimits() {
 	if err != nil {
 		Error.Print(err)
 	}
+
+	return limits
 }
 
 func InitDb() {
@@ -110,7 +112,6 @@ func init() {
 		log.Ldate|log.Ltime|log.Lshortfile)
 	// Initialize database
 	InitDb()
-	LoadLimits()
 }
 
 func (limitServer *LimitServer) AcquireToken(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +218,39 @@ func (limitServer *LimitServer) DeleteLimit(w http.ResponseWriter, r *http.Reque
 	limitServer.Unlock()
 }
 
+func (limitServer *LimitServer) SubstituteLimits() {
+	Info.Print("Substitute limits")
+	// Load limits from database
+	limits := LoadLimits()
+	limitServer.Lock()
+	defer limitServer.Unlock()
+	// Substitute old limits by new, old limits are shut down
+	for index := range limits {
+		limit := limits[index]
+		oldLimit, ok := limitServer.limitsMap[limit.LimitId]
+
+		if ok {
+			// Send stop signal to all limit goroutines
+			close(oldLimit.ShutDown)
+		}
+		// Save limit to map and start it
+		limitServer.limitsMap[limit.LimitId] = *limit
+		// go limit.Run()
+	}
+}
+
+func (limitServer *LimitServer) LimitUpdater() {
+	ticker := time.NewTicker(time.Duration(5) * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			Info.Print("Update limits")
+			limitServer.SubstituteLimits()
+		}
+	}
+}
+
 func main() {
 	if pprofEnabled {
 		pprofUrl := fmt.Sprintf("localhost:%d", pprofport)
@@ -230,6 +264,9 @@ func main() {
 	limitServer := LimitServer{
 		limitsMap: make(map[string]Limit),
 	}
+	limitServer.SubstituteLimits()
+	go limitServer.LimitUpdater()
+
 	router := mux.NewRouter()
 
 	router.HandleFunc("/limit/{limit}/acquire", limitServer.AcquireToken).Methods(http.MethodHead)

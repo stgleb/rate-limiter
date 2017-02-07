@@ -67,6 +67,23 @@ func NewLimit(name string, interval, count int, precision float64) *Limit {
 	return limit
 }
 
+// Create new limit, interval is set in milliseconds.
+func NewEmptyLimit() *Limit {
+	limit := &Limit{
+		Name:      "",
+		Interval:  0,
+		Count:     0,
+		Precision: 0.0,
+		Output:    make(chan Token),
+		ShutDown:  make(chan struct{}),
+		Update:    make(chan LimitConf),
+		GetConf:   make(chan LimitConf),
+	}
+	Info.Printf("Create empty limit %+v", *limit)
+
+	return limit
+}
+
 func (limit *Limit) Run() {
 	updateInterval := time.Duration(limit.Interval / limit.Count)
 	ticker := time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
