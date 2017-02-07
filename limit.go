@@ -79,7 +79,6 @@ func NewEmptyLimit() *Limit {
 		Update:    make(chan LimitConf),
 		GetConf:   make(chan LimitConf),
 	}
-	Info.Printf("Create empty limit %+v", *limit)
 
 	return limit
 }

@@ -34,7 +34,6 @@ type LimitServer struct {
 func LoadLimits() []*Limit {
 	var Id int
 	limits := make([]*Limit, 0, 32)
-	Info.Printf("Load limits from database %v", db)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -59,7 +58,6 @@ func LoadLimits() []*Limit {
 		}
 		// Collect limits
 		limits = append(limits, limit)
-		Info.Println(limit)
 	}
 	err = rows.Err()
 
@@ -229,13 +227,21 @@ func (limitServer *LimitServer) SubstituteLimits() {
 		limit := limits[index]
 		oldLimit, ok := limitServer.limitsMap[limit.LimitId]
 
-		if ok {
+		if ok && limit.UpdatedAt != oldLimit.UpdatedAt {
+			Info.Printf("Update limit %s", limit.LimitId)
+
 			// Send stop signal to all limit goroutines
 			close(oldLimit.ShutDown)
+
+			// Save limit to map and start it
+			limitServer.limitsMap[limit.LimitId] = *limit
+			go limit.Run()
+		} else if !ok {
+			// If limit is new
+			Info.Printf("Start limit %s", limit.LimitId)
+			limitServer.limitsMap[limit.LimitId] = *limit
+			go limit.Run()
 		}
-		// Save limit to map and start it
-		limitServer.limitsMap[limit.LimitId] = *limit
-		go limit.Run()
 	}
 }
 
@@ -269,7 +275,7 @@ func main() {
 
 	router := mux.NewRouter()
 
-	router.HandleFunc("/limit/{limit}/acquire", limitServer.AcquireToken).Methods(http.MethodHead)
+	router.HandleFunc("/limit/{limit}/acquire", limitServer.AcquireToken).Methods(http.MethodGet)
 	router.HandleFunc("/limit/{limit}", limitServer.GetLimit).Methods(http.MethodGet)
 	router.HandleFunc("/limit", limitServer.CreateLimit).Methods(http.MethodPost)
 	router.HandleFunc("/limit", limitServer.UpdateLimit).Methods(http.MethodPut)
