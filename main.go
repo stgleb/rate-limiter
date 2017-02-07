@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -21,6 +23,7 @@ var (
 	port         int
 	pprofEnabled bool
 	pprofport    int
+	db           sql.DB
 )
 
 type LimitServer struct {
@@ -28,7 +31,35 @@ type LimitServer struct {
 	sync.RWMutex
 }
 
+func LoadLimits() {
+}
+
+func InitDb() {
+	db, err := sql.Open("sqlite3", "./limits.db")
+
+	if err != nil {
+		Error.Print("Cannot access databse")
+	}
+
+	if err = db.Ping(); err != nil {
+		Error.Print("Cannot ping database")
+	}
+
+	// Create table if not exists
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS limits ( id integer PRIMARY KEY, offer_id varchar(255) NOT NULL, limit_id varchar(255) NOT NULL, count INTEGER(255), interval INTEGER(255), precision real, is_deleted INTEGER(1))")
+
+	if err != nil {
+		log.Print(err)
+	}
+}
+
 func init() {
+	flag.IntVar(&port, "port", 9000, "port number")
+	flag.StringVar(&Host, "address", "0.0.0.0", "Address to listen")
+	flag.BoolVar(&pprofEnabled, "pprof", false, "enable pprof for profiling")
+	flag.IntVar(&pprofport, "pprofPort", 6060, "pprof port")
+	flag.Parse()
+
 	Info = log.New(os.Stdout,
 		"INFO: ",
 		log.Ldate|log.Ltime|log.Lshortfile)
@@ -36,6 +67,9 @@ func init() {
 	Error = log.New(os.Stderr,
 		"ERROR: ",
 		log.Ldate|log.Ltime|log.Lshortfile)
+	// Initialize database
+	InitDb()
+	LoadLimits()
 }
 
 func (limitServer *LimitServer) AcquireToken(w http.ResponseWriter, r *http.Request) {
@@ -143,12 +177,6 @@ func (limitServer *LimitServer) DeleteLimit(w http.ResponseWriter, r *http.Reque
 }
 
 func main() {
-	flag.IntVar(&port, "port", 9000, "port number")
-	flag.StringVar(&Host, "address", "0.0.0.0", "Address to listen")
-	flag.BoolVar(&pprofEnabled, "pprof", false, "enable pprof for profiling")
-	flag.IntVar(&pprofport, "pprofPort", 6060, "pprof port")
-	flag.Parse()
-
 	if pprofEnabled {
 		pprofUrl := fmt.Sprintf("localhost:%d", pprofport)
 		Info.Printf("Start profiling on %s", pprofUrl)

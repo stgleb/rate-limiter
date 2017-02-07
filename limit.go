@@ -76,7 +76,7 @@ func (limit *Limit) Run() {
 	for {
 		select {
 		case <-ticker.C:
-			Info.Printf("Send new token")
+			Info.Print("Send new token")
 			limit.Output <- Token{}
 		case <-limit.ShutDown:
 			Info.Printf("Channel %s shut down", limit.Name)
