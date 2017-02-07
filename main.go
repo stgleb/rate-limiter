@@ -235,7 +235,7 @@ func (limitServer *LimitServer) SubstituteLimits() {
 		}
 		// Save limit to map and start it
 		limitServer.limitsMap[limit.LimitId] = *limit
-		// go limit.Run()
+		go limit.Run()
 	}
 }
 

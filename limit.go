@@ -85,8 +85,10 @@ func NewEmptyLimit() *Limit {
 }
 
 func (limit *Limit) Run() {
-	updateInterval := time.Duration(limit.Interval / limit.Count)
-	ticker := time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
+	updateInterval := time.Duration(limit.Interval * 1000 * 1000 * 1000 / limit.Count)
+	Info.Printf("Limit %s Update interval %v", limit.LimitId, updateInterval)
+	ticker := time.NewTicker(updateInterval)
+
 	currentConf := LimitConf{
 		Name:      limit.Name,
 		Count:     limit.Count,
@@ -97,7 +99,7 @@ func (limit *Limit) Run() {
 	for {
 		select {
 		case <-ticker.C:
-			Info.Print("Send new token")
+			Info.Printf("Limit %s Send new token", limit.LimitId)
 			limit.Output <- Token{}
 		case <-limit.ShutDown:
 			Info.Printf("Channel %s shut down", limit.Name)
@@ -109,7 +111,7 @@ func (limit *Limit) Run() {
 			limit.Interval = currentConf.Interval
 			limit.Precision = currentConf.Precision
 			// TODO(stgleb): consider whether manipulation of ticker inside select is racy.
-			updateInterval := time.Duration(limit.Interval / limit.Count)
+			updateInterval = time.Duration(limit.Interval * 1000 * 1000 / limit.Count)
 			ticker = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 
 			if len(currentConf.Name) > 0 {
