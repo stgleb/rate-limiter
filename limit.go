@@ -16,10 +16,14 @@ type LimitConf struct {
 }
 
 type Limit struct {
+	LimitId   string         `json:"limit_id"`
+	OfferId   string         `json:"offer_id"`
 	Name      string         `json:"name"`
 	Interval  int            `json:"interval"`
 	Precision float64        `json:"precision"`
 	Count     int            `json:"count"`
+	IsDeleted bool           `json:"-"`
+	UpdatedAt int64          `json:"count"`
 	Output    chan Token     `json:"-"`
 	ShutDown  chan struct{}  `json:"-"`
 	Update    chan LimitConf `json:"-"`
@@ -102,6 +106,6 @@ func (limit *Limit) Run() {
 }
 
 func (limit Limit) String() string {
-	return fmt.Sprintf("<Name: %s, Interval: %d, Count: %d, Precision: %f>",
-		limit.Name, limit.Interval, limit.Count, limit.Precision)
+	return fmt.Sprintf("<Name: %s, OfferId: %s, Interval: %d, Count: %d, Precision: %f, UpdatedAt: %d>",
+		limit.Name, limit.OfferId, limit.Interval, limit.Count, limit.Precision, limit.UpdatedAt)
 }

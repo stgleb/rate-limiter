@@ -23,7 +23,7 @@ var (
 	port         int
 	pprofEnabled bool
 	pprofport    int
-	db           sql.DB
+	db           *sql.DB
 )
 
 type LimitServer struct {
@@ -32,10 +32,51 @@ type LimitServer struct {
 }
 
 func LoadLimits() {
+	var Id int
+	limits := make([]Limit, 0, 32)
+	Info.Print(db)
+
+	tx, err := db.Begin()
+	if err != nil {
+		Error.Print(err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query("SELECT * FROM limits where is_deleted = 0")
+	defer rows.Close()
+
+	if err != nil {
+		Error.Print(err)
+	}
+
+	for rows.Next() {
+		limit := Limit{}
+		err := rows.Scan(&Id, &limit.OfferId, &limit.LimitId,
+			&limit.Count, &limit.Interval, &limit.Precision,
+			&limit.IsDeleted, &limit.UpdatedAt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Collect limits
+		limits = append(limits, limit)
+		Info.Println(limit)
+	}
+	err = rows.Err()
+
+	if err != nil {
+		Error.Print(err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		Error.Print(err)
+	}
 }
 
 func InitDb() {
-	db, err := sql.Open("sqlite3", "./limits.db")
+	// NOTE: err is declared in advance not to omit db
+	var err error
+	db, err = sql.Open("sqlite3", "./limits.db")
 
 	if err != nil {
 		Error.Print("Cannot access databse")
@@ -46,10 +87,10 @@ func InitDb() {
 	}
 
 	// Create table if not exists
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS limits ( id integer PRIMARY KEY, offer_id varchar(255) NOT NULL, limit_id varchar(255) NOT NULL, count INTEGER(255), interval INTEGER(255), precision real, is_deleted INTEGER(1))")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS limits ( id integer PRIMARY KEY, offer_id varchar(255) NOT NULL, limit_id varchar(255) NOT NULL, count INTEGER(255), interval INTEGER(255), precision real, is_deleted INTEGER(1), updated_at INTEGER(32))")
 
 	if err != nil {
-		log.Print(err)
+		Error.Print(err)
 	}
 }
 
